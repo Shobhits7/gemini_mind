@@ -1,7 +1,6 @@
 # frozen_string_literal: true
 
 require "faraday"
-require "faraday/retry"
 require "json"
 
 module GeminiMind
@@ -103,25 +102,13 @@ module GeminiMind
       body
     end
 
-    # Create a Faraday connection with retry capabilities
+    # Create a Faraday connection
     # @return [Faraday::Connection] The configured connection
     def connection
       @connection ||= Faraday.new do |conn|
         conn.url_prefix = "https://generativelanguage.googleapis.com/#{@config.api_version}"
         conn.request :json
         conn.options.timeout = @config.timeout
-        # Fixed retry configuration to use the correct options
-        conn.request :retry, {
-          max: @config.max_retries,
-          status: [429, 500, 502, 503, 504],
-          methods: [:post],
-          exceptions: [
-            Errno::ETIMEDOUT,
-            Timeout::Error,
-            Faraday::TimeoutError,
-            Faraday::ConnectionFailed
-          ]
-        }
         conn.adapter Faraday.default_adapter
       end
     end
