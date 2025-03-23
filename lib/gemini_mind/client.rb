@@ -43,20 +43,61 @@ module GeminiMind
           req.body = JSON.generate(body)
         end
         
-        response_data = JSON.parse(response.body)
+        if response.status != 200
+          handle_error_response(response)
+        end
+        
+        # Ensure we have a valid JSON response
+        response_body = response.body.to_s.strip
+        if response_body.empty?
+          raise ResponseError, "Empty response received from API"
+        end
+        
+        response_data = JSON.parse(response_body)
         
         # Cache the response if caching is enabled
         @cache.set(cache_key, response.body) if @config.cache_enabled?
         
         Response.new(response_data)
+      rescue JSON::ParserError => e
+        raise ResponseError, "Failed to parse API response: #{e.message}. Response body: #{response&.body.to_s[0..100]}"
       rescue Faraday::Error => e
         handle_request_error(e)
-      rescue JSON::ParserError => e
-        raise ResponseError, "Failed to parse API response: #{e.message}"
       end
     end
 
     private
+
+    # Handle non-200 response
+    # @param response [Faraday::Response] The response object
+    # @raise [GeminiMind::Error] A specific error based on status code
+    def handle_error_response(response)
+      error_message = "API request failed with status #{response.status}"
+      
+      begin
+        if !response.body.to_s.empty?
+          error_data = JSON.parse(response.body)
+          if error_data && error_data["error"] && error_data["error"]["message"]
+            error_message = "API error: #{error_data["error"]["message"]}"
+          end
+        end
+      rescue JSON::ParserError
+        # If we can't parse the error body, just use the status code message
+      end
+      
+      case response.status
+      when 400..499
+        if response.status == 429
+          raise RateLimitError, "Rate limit exceeded: #{error_message}"
+        else
+          raise ApiError, error_message
+        end
+      when 500..599
+        raise ServiceError, "Gemini API service error: #{error_message}"
+      else
+        raise Error, error_message
+      end
+    end
 
     # Generate a cache key based on the request parameters
     # @return [String] A unique key for caching
@@ -128,9 +169,9 @@ module GeminiMind
       when Faraday::TimeoutError
         raise TimeoutError, "Request timed out after #{@config.timeout} seconds"
       when Faraday::ConnectionFailed
-        raise ConnectionError, "Connection to Gemini API failed"
+        raise ConnectionError, "Connection to Gemini API failed: #{error.message}"
       when Faraday::ResourceNotFound
-        raise NotFoundError, "Requested resource or model not found"
+        raise NotFoundError, "Requested resource or model not found: #{error.message}"
       when Faraday::ClientError
         if error.response && error.response[:status] == 429
           raise RateLimitError, "Rate limit exceeded"

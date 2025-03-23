@@ -1,11 +1,17 @@
 # Changelog
 
+## [0.1.4] - 2025-03-23
+
+### Fixed
+- Removed problematic Faraday retry middleware
+- Improved error handling for empty responses
+- Added better JSON parsing error reporting
+- Enhanced error response handling with more descriptive messages
+
 ## [0.1.3] - 2025-03-23
 
 ### Fixed
-- Made Faraday retry configuration robust across different versions
-- Added fallback mechanisms for retry middleware configuration
-- Added graceful degradation for connection setup
+- Attempted to fix Faraday retry middleware configuration
 
 ## [0.1.2] - 2025-03-23
 
